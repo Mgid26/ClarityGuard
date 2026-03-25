@@ -304,4 +304,41 @@
     (ok (var-get contract-paused))
 )
 
+;; @desc Allows an authorized AI node to update an existing fingerprint if they originally registered it
+;; @param nft-contract; the principal of the NFT contract
+;; @param token-id; the token ID of the NFT
+;; @param new-fingerprint; the updated 32-byte AI-generated fingerprint
+;; @returns (response bool uint); ok true if successful
+(define-public (update-fingerprint
+    (nft-contract principal)
+    (token-id uint)
+    (new-fingerprint (buff 32))
+)
+    (let
+        (
+            (caller tx-sender)
+            (nft-key { nft-contract: nft-contract, token-id: token-id })
+            (existing-data (unwrap! (map-get? nft-fingerprints nft-key) ERR-NOT-FOUND))
+        )
+        ;; Check if contract is paused
+        (asserts! (is-not-paused) ERR-PAUSED)
+        ;; Ensure the caller is an authorized AI node
+        (asserts! (is-authorized-node caller) ERR-UNAUTHORIZED)
+        ;; Ensure only the original registrant can update the fingerprint
+        (asserts! (is-eq caller (get registered-by existing-data)) ERR-UNAUTHORIZED)
+
+        ;; Update the fingerprint
+        (map-set nft-fingerprints
+            nft-key
+            {
+                fingerprint: new-fingerprint,
+                registered-by: caller,
+                timestamp: block-height
+            }
+        )
+        (print { event: "fingerprint-updated", nft-contract: nft-contract, token-id: token-id, node: caller })
+        (ok true)
+    )
+)
+
 
